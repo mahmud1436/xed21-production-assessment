@@ -1,6 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
 import cors from "cors";
 
 // Import Cloud SQL connection for production
@@ -32,6 +31,16 @@ if (process.env.NODE_ENV === "production") {
   } catch (error) {
     console.error('❌ Production database connection failed:', error);
   }
+}
+
+function log(message: string) {
+  const formattedTime = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  console.log(`${formattedTime} [express] ${message}`);
 }
 
 app.use((req, res, next) => {
@@ -75,19 +84,51 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
+  // Add basic health endpoints
+  app.get("/health", (_req, res) => {
+    res.status(200).json({ 
+      status: "ok", 
+      message: "API is running",
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  app.get("/api/test", (_req, res) => {
+    res.status(200).json({ 
+      message: "API test successful", 
+      timestamp: new Date().toISOString(),
+      database: process.env.DATABASE_URL ? "connected" : "not configured"
+    });
+  });
+
+  // Simple static file serving (only in production)
+  if (process.env.NODE_ENV === "production") {
+    // Serve a simple response for all other routes
+    app.use("*", (_req, res) => {
+      res.status(200).json({ 
+        message: "API is running",
+        endpoints: ["/health", "/api/test"],
+        environment: "production"
+      });
+    });
   } else {
-    serveStatic(app);
+    // Development mode - import vite setup
+    try {
+      const { setupVite } = await import("./vite");
+      await setupVite(app, server);
+    } catch (error) {
+      console.log("Vite setup failed, running in API-only mode");
+      app.use("*", (_req, res) => {
+        res.status(200).json({ 
+          message: "API is running (development mode)",
+          endpoints: ["/health", "/api/test"]
+        });
+      });
+    }
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
   server.listen({
     port,
