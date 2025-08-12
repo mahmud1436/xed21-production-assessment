@@ -4,15 +4,19 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
+
+# Install dependencies
 RUN npm ci
 
-# Copy application files
-COPY dist/ ./dist/
+# Copy source code
 COPY server/ ./server/
 COPY shared/ ./shared/
+
+# Install ts-node for running TypeScript directly
+RUN npm install -g ts-node
 
 # Expose port
 EXPOSE 8080
 
-# Start the server
-CMD ["node", "dist/index.js"]
+# Run TypeScript directly
+CMD ["npx", "ts-node", "server/index.ts"]
