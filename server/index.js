@@ -1,21 +1,35 @@
 const express = require('express');
-const { Pool } = require('pg');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Database connection pool
-const pool = new Pool({
-  host: process.env.DATABASE_HOST,
-  user: process.env.DATABASE_USER,
-  database: process.env.DATABASE_NAME,
-  password: process.env.DATABASE_PASSWORD,
-  port: process.env.DATABASE_PORT,
-  ssl: false,
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+// Safe database connection - only initialize if needed
+let pool = null;
+
+// Function to get database connection safely
+const getDbPool = () => {
+  if (!pool) {
+    try {
+      const { Pool } = require('pg');
+      pool = new Pool({
+        host: process.env.DATABASE_HOST,
+        user: process.env.DATABASE_USER,
+        database: process.env.DATABASE_NAME,
+        password: process.env.DATABASE_PASSWORD,
+        port: process.env.DATABASE_PORT,
+        ssl: false,
+        max: 10,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      });
+      console.log('✅ Database pool created');
+    } catch (error) {
+      console.error('❌ Database pool creation failed:', error.message);
+      return null;
+    }
+  }
+  return pool;
+};
 
 // Basic middleware
 app.use(express.json());
@@ -66,11 +80,19 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
-// Real database connection test
+// Safe database connection test
 app.get('/api/db-connect', async (req, res) => {
   console.log('Database connection test hit');
   try {
-    const client = await pool.connect();
+    const dbPool = getDbPool();
+    if (!dbPool) {
+      return res.status(500).json({
+        error: 'Database pool not available',
+        message: 'PostgreSQL module failed to initialize'
+      });
+    }
+
+    const client = await dbPool.connect();
     const result = await client.query('SELECT NOW() as current_time, version() as postgres_version');
     client.release();
     
@@ -88,11 +110,19 @@ app.get('/api/db-connect', async (req, res) => {
   }
 });
 
-// Test users table (for your application)
+// Safe users table test
 app.get('/api/users', async (req, res) => {
   console.log('Users endpoint hit');
   try {
-    const client = await pool.connect();
+    const dbPool = getDbPool();
+    if (!dbPool) {
+      return res.status(500).json({
+        error: 'Database pool not available',
+        message: 'PostgreSQL module failed to initialize'
+      });
+    }
+
+    const client = await dbPool.connect();
     try {
       const result = await client.query('SELECT * FROM users LIMIT 10');
       res.status(200).json({ 
@@ -123,7 +153,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Listening on 0.0.0.0:${PORT}`);
   console.log(`📍 Node.js version: ${process.version}`);
   console.log(`⏰ Started at: ${new Date().toISOString()}`);
-  console.log(`🗄️ Database configured: ${process.env.DATABASE_HOST}:${process.env.DATABASE_PORT}`);
+  console.log(`🗄️ Database host: ${process.env.DATABASE_HOST}:${process.env.DATABASE_PORT}`);
 });
 
 // Handle startup errors
@@ -136,11 +166,16 @@ server.on('error', (err) => {
 process.on('SIGTERM', () => {
   console.log('📴 SIGTERM received, shutting down gracefully');
   server.close(() => {
-    pool.end(() => {
-      console.log('✅ Database pool closed');
+    if (pool) {
+      pool.end(() => {
+        console.log('✅ Database pool closed');
+        console.log('✅ Server closed');
+        process.exit(0);
+      });
+    } else {
       console.log('✅ Server closed');
       process.exit(0);
-    });
+    }
   });
 });
 
