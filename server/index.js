@@ -1,4 +1,4 @@
-import express from 'express';
+const express = require('express');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -26,6 +26,7 @@ app.get('/api/test', (req, res) => {
     environment: process.env.NODE_ENV || 'production'
   });
 });
+
 // Database test endpoint
 app.get('/api/db-test', async (req, res) => {
   console.log('Database test endpoint hit');
@@ -50,6 +51,7 @@ app.get('/api/db-test', async (req, res) => {
     });
   }
 });
+
 // Start server with detailed logging
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server started successfully`);
