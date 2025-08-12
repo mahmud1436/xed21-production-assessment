@@ -1,27 +1,26 @@
 FROM node:18-slim
 
+# Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy only necessary files first
 COPY package*.json ./
 
-# Install dependencies including TypeScript
-RUN npm ci
+# Install dependencies
+RUN npm ci --only=production
 
-# Install TypeScript globally for compilation
-RUN npm install -g typescript
-
-# Copy source code
+# Copy server code
 COPY server/ ./server/
 
-# Create tsconfig.json for compilation
-RUN echo '{"compilerOptions":{"target":"es2020","module":"commonjs","esModuleInterop":true,"allowSyntheticDefaultImports":true,"strict":false,"skipLibCheck":true,"outDir":"./dist"},"include":["server/**/*"]}' > tsconfig.json
-
-# Compile TypeScript to JavaScript
-RUN tsc
+# Create a non-root user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN chown -R appuser:appuser /app
+USER appuser
 
 # Expose port
 EXPOSE 8080
 
-# Run the compiled JavaScript
-CMD ["node", "dist/server/index.js"]
+# No health check needed - Cloud Run handles this
+
+# Start the server
+CMD ["node", "server/index.js"]
