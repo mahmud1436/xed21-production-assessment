@@ -12,11 +12,8 @@ RUN npm ci
 COPY server/ ./server/
 COPY shared/ ./shared/
 
-# Install ts-node for running TypeScript directly
-RUN npm install -g ts-node
-
 # Expose port
 EXPOSE 8080
 
-# Run TypeScript directly
-CMD ["npx", "ts-node", "server/index.ts"]
+# Run the JavaScript server directly
+CMD ["node", "server/index.js"]
